@@ -83,12 +83,13 @@ class PipelineLogger:
         table.add_column("Avg latency ms", style="blue", min_width=15, justify="right")
         table.add_column("Avg tok/s", style="magenta", min_width=11, justify="right")
         table.add_column("Total tokens", style="white", min_width=13, justify="right")
+        table.add_column("Avg quality", style="yellow", min_width=11, justify="right")
 
         summary = {}
         for row in results:
             m = row.result.model
             if m not in summary:
-                summary[m] = {"q": 0, "ans": 0, "no_ans": 0, "err": 0, "lat": 0.0, "tok_s": [], "tot_tok": 0}
+                summary[m] = {"q": 0, "ans": 0, "no_ans": 0, "err": 0, "lat": 0.0, "tok_s": [], "tot_tok": 0, "qual": []}
             
             s = summary[m]
             s["q"] += 1
@@ -100,18 +101,29 @@ class PipelineLogger:
                     s["no_ans"] += 1
                 else:
                     s["ans"] += 1
-            
-            s["lat"] += row.result.llm_ms
-            if row.result.tokens_per_sec is not None:
-                s["tok_s"].append(row.result.tokens_per_sec)
-            s["tot_tok"] += row.result.prompt_tokens + row.result.completion_tokens
+                
+                s["lat"] += row.result.llm_ms
+                if row.result.tokens_per_sec is not None:
+                    s["tok_s"].append(row.result.tokens_per_sec)
+                s["tot_tok"] += (row.result.prompt_tokens + row.result.completion_tokens)
+                if row.result.quality_score is not None:
+                    s["qual"].append(row.result.quality_score)
             
         for m, s in summary.items():
             avg_lat = s["lat"] / s["q"] if s["q"] > 0 else 0
             avg_tok_s = sum(s["tok_s"]) / len(s["tok_s"]) if s["tok_s"] else 0
+            avg_qual = sum(s["qual"]) / len(s["qual"]) if s["qual"] else 0.0
+            
             table.add_row(
-                m, str(s["q"]), str(s["ans"]), str(s["no_ans"]), str(s["err"]),
-                f"{avg_lat:.0f}", f"{avg_tok_s:.1f}", str(s["tot_tok"])
+                m,
+                str(s["q"]),
+                str(s["ans"]),
+                str(s["no_ans"]),
+                str(s["err"]),
+                f"{avg_lat:.0f}",
+                f"{avg_tok_s:.1f}",
+                str(s["tot_tok"]),
+                f"{avg_qual:.1f}"
             )
             
         # Add total row

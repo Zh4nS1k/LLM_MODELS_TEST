@@ -13,8 +13,9 @@ class Settings:
         self.pinecone_api_key = os.getenv("PINECONE_API_KEY", "")
         self.pinecone_index_name = os.getenv("PINECONE_INDEX_NAME", "")
         self.pinecone_namespace = os.getenv("PINECONE_NAMESPACE", "")
-        self.pinecone_top_k = int(os.getenv("PINECONE_TOP_K", "5"))
-        self.pinecone_score_threshold = float(os.getenv("PINECONE_SCORE_THRESHOLD", "0.0"))
+        self.pinecone_top_k = int(os.getenv("PINECONE_TOP_K", "10"))
+        self.pinecone_final_k = int(os.getenv("PINECONE_FINAL_K", "5"))
+        self.pinecone_score_threshold = float(os.getenv("PINECONE_SCORE_THRESHOLD", "0.75"))
 
         # === Embedding model ===
         self.embedding_model = os.getenv("EMBEDDING_MODEL", "intfloat/multilingual-e5-large")
@@ -45,6 +46,8 @@ class Settings:
         self.log_level = os.getenv("LOG_LEVEL", "INFO")
         self.chunk_text_field = os.getenv("CHUNK_TEXT_FIELD", "text")
         self.verbose = os.getenv("VERBOSE", "false").lower() == "true"
+        self.query_rewriter_model = os.getenv("QUERY_REWRITER_MODEL", "llama-3.1-8b-instant")
+        self.enable_query_rewriting = os.getenv("ENABLE_QUERY_REWRITING", "true").lower() == "true"
 
 # Create global settings instance
 settings = Settings()

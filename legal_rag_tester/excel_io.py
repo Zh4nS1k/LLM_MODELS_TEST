@@ -63,9 +63,10 @@ def write_results(results: List[TestRow], base_file_path: str = settings.output_
     sheet.title = "Results"
     
     headers = [
-        "id", "question", "model", "answer", "answer_raw", "chunks_used", 
-        "avg_score", "embed_ms", "retrieve_ms", "llm_ms", "total_ms", 
-        "tokens_per_sec", "prompt_tokens", "completion_tokens", "error"
+        "id", "question", "model", "answer", "answer_raw", 
+        "chunks_used", "avg_chunk_score", "quality_score", "quality_reason", "quality_rank",
+        "embed_ms", "retrieve_ms", "llm_ms", "total_ms", 
+        "prompt_tokens", "completion_tokens", "tokens_per_sec", "error"
     ]
     sheet.append(headers)
     
@@ -82,6 +83,9 @@ def write_results(results: List[TestRow], base_file_path: str = settings.output_
             r.answer_raw,
             r.chunks_used,
             round(r.avg_score, 4),
+            r.quality_score,
+            r.quality_reason,
+            r.quality_rank,
             round(r.embed_ms, 2),
             round(r.retrieve_ms, 2),
             round(r.llm_ms, 2),

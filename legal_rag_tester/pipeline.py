@@ -11,6 +11,8 @@ from prompt_builder import PromptBuilder
 from llm_client import LLMClient
 from config import settings
 from models.schemas import TestRow
+from query_rewriter import QueryRewriter
+from answer_scorer import AnswerScorer
 
 class TestPipeline:
     """Orchestrates the entire evaluation process."""
@@ -22,6 +24,8 @@ class TestPipeline:
         self.prompt_builder = PromptBuilder()
         self.llm_client = LLMClient()
         self.token_counter = TokenCounter()
+        self.query_rewriter = QueryRewriter()
+        self.answer_scorer = AnswerScorer()
         
         self.models_to_test = settings.llm_models
         if override_models:
@@ -49,12 +53,16 @@ class TestPipeline:
         for q_index, question in enumerate(tqdm(questions, desc="Processing questions"), 1):
             pipeline_logger.log_question(question.id, question.text, q_index, len(questions))
             
+            rewritten_query = self.query_rewriter.rewrite(question.text)
+            pipeline_logger.log_simple_info(f"🔍 Original: {question.text[:100]}...")
+            pipeline_logger.log_simple_info(f"🔍 Rewritten: {rewritten_query}")
+            
             with StepTimer("embed") as t_embed:
-                embedding = self.embedder.embed(question.text)
+                embedding = self.embedder.embed(rewritten_query)
             pipeline_logger.log_timing("embed", t_embed.elapsed_ms)
             
             with StepTimer("retrieve") as t_retrieve:
-                chunks = self.retriever.query(embedding)
+                chunks = self.retriever.query(embedding, query_text=question.text)
             pipeline_logger.log_retrieval(question.id, chunks, t_retrieve.elapsed_ms)
             
             if len(chunks) < 2:
@@ -121,6 +129,11 @@ class TestPipeline:
                 result.prompt_tokens = prompt_toks
                 result.completion_tokens = comp_toks
                 
+                # Auto-scoring
+                score_val, reason = self.answer_scorer.score(question.text, prompt["user"], result.answer)
+                result.quality_score = score_val
+                result.quality_reason = reason
+                
                 result.tokens_per_sec = comp_toks / (result.llm_ms / 1000.0) if result.llm_ms > 0 else 0.0
                 
                 self.token_counter.record(model_name, prompt_toks, comp_toks)
@@ -135,6 +148,12 @@ class TestPipeline:
                     pipeline_logger.log_tokens(question.id, model_name, prompt_toks, comp_toks, total_toks, result.llm_ms)
                     
             if not dry_run:
+                # Rank models for this question
+                q_results = results[-len(self.models_to_test):]
+                q_results.sort(key=lambda x: x.result.quality_score, reverse=True)
+                for rank, row in enumerate(q_results, 1):
+                    row.result.quality_rank = rank
+                    
                 pipeline_logger.log_question_done(question.id, t_embed.elapsed_ms + t_retrieve.elapsed_ms + total_llm_ms, len(self.models_to_test))
                     
         if not dry_run:

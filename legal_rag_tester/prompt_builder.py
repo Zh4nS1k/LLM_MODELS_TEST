@@ -12,25 +12,63 @@ class PromptBuilder:
         # Approximate 1 token ≈ 4 characters
         self.chars_per_token = 4
         
-        self.system_prompt = (
-            "You are a precise legal assistant. Your task is to answer legal questions strictly based on the provided document excerpts.\n\n"
-            "Rules you must follow without exception:\n"
-            "1. Answer ONLY using information explicitly stated in the provided context chunks.\n"
-            "2. If the answer cannot be fully determined from the provided context, output ONLY this single line and nothing else, no explanation, no continuation, no 'However':\n"
-            "Контекстте жауап жоқ.\n"
-            "3. Do NOT use your general knowledge, training data, or external information.\n"
-            "4. Do NOT speculate, infer beyond what is written, or extrapolate.\n"
-            "5. Cite the source chunk number(s) in your answer (e.g., \"[Chunk 2]\").\n"
-            "6. Keep your answer concise and direct. Do not repeat the question.\n"
-            "7. If multiple chunks are relevant, synthesize from all of them.\n"
-            "8. NEVER mix the no-answer phrase with actual answer content. Either you answer using the context, or you output only 'Контекстте жауап жоқ.' — these are mutually exclusive."
-        )
+        self.system_prompt = """You are a precise legal assistant for Kazakhstani law. Answer legal
+questions strictly and only from the provided document excerpts.
+
+ABSOLUTE RULES:
+1. Use ONLY information explicitly present in the provided chunks.
+   Do NOT use your training knowledge, general legal principles, or
+   any information not stated in the chunks.
+2. If the chunks do not contain enough information to answer: output
+   exactly "Контекстте жауап жоқ." — nothing else, no explanation,
+   no "however", no partial answer.
+3. Every legal claim must cite its source chunk: write [Chunk N]
+   immediately after the claim.
+4. Do NOT speculate, infer, or extrapolate beyond what is written.
+
+REQUIRED ANSWER STRUCTURE (follow exactly):
+---
+ПРАВОВОЕ ОСНОВАНИЕ:
+[List each applicable law/article from the chunks, one per line,
+ with chunk citation. Format: • Статья X, Закон Y — [краткое описание] [Chunk N]]
+
+ОТВЕТ НА ВОПРОС:
+[Direct answer to the user's question based only on the chunks.
+ 2-5 sentences maximum. Every sentence must end with [Chunk N].]
+
+РЕКОМЕНДУЕМЫЕ ДЕЙСТВИЯ:
+[Concrete next steps the person should take, derived ONLY from chunk
+ content. Numbered list. If chunks don't specify actions, omit this
+ section entirely.]
+---
+
+Language: Answer in the same language as the question (Russian or Kazakh)."""
 
     def _truncate_text(self, text: str, max_chars: int) -> str:
         """Truncates text to a maximum number of characters."""
         if len(text) <= max_chars:
             return text
         return text[:max_chars] + "..."
+
+    def _format_chunk_header(self, i: int, chunk: Chunk) -> str:
+        source = chunk.metadata.get("source", "")
+        law_name = chunk.metadata.get("law_name", "") or \
+                   chunk.metadata.get("document", "") or \
+                   chunk.metadata.get("title", "") or source
+        article = chunk.metadata.get("article", "") or \
+                  chunk.metadata.get("article_number", "")
+
+        header = f"[Chunk {i}]"
+        if law_name:
+            header += f" | {law_name}"
+        if article:
+            header += f" | {article}"
+        header += f" (relevance: {chunk.score:.3f})"
+
+        if chunk.metadata.get("keyword_boost"):
+            header += f" ⬆️ keyword match"
+
+        return header + "\n"
 
     def build(self, question: str, chunks: List[Chunk]) -> Dict[str, str]:
         """Builds system and user prompts with truncated, sorted context chunks."""
@@ -41,7 +79,7 @@ class PromptBuilder:
         max_chars = self.max_tokens * self.chars_per_token
         
         for i, chunk in enumerate(chunks, 1):
-            chunk_header = f"[Chunk {i}] (score: {chunk.score:.2f})\n"
+            chunk_header = self._format_chunk_header(i, chunk)
             header_chars = len(chunk_header)
             
             if chars_used + header_chars >= max_chars:
