@@ -5,8 +5,8 @@ from llm_client import LLMClient
 class AnswerScorer:
     def __init__(self):
         self.llm_client = LLMClient()
-        # Default to llama-3.3 for high quality judgment
-        self.model = "llama-3.3-70b-versatile"
+        # Default to models/gemini-3.5-flash to avoid Groq rate limits
+        self.model = "models/gemini-3.5-flash"
         
         self.system_prompt = """You are a legal answer quality evaluator. Score the given answer
 on a scale of 0–10 based on these criteria:
@@ -21,7 +21,7 @@ on a scale of 0–10 based on these criteria:
 Respond with ONLY: <score>|<one sentence reason>
 Example: 8|Correctly cites Article 35 and 42-4 but misses Article 634."""
 
-    def score(self, question: str, chunks_context: str, answer: str) -> tuple[int, str]:
+    def score(self, question: str, chunks_context: str, answer: str, q_id: str = "unknown") -> tuple[int, str]:
         """Returns (score 0-10, one-line reason)."""
         # If the model explicitly gave no answer, auto-score 0
         if answer.strip() == "Контекстте жауап жоқ.":
@@ -30,7 +30,7 @@ Example: 8|Correctly cites Article 35 and 42-4 but misses Article 634."""
         user_prompt = f"Question: {question}\nContext chunks: {chunks_context}\nAnswer to evaluate: {answer}\nScore:"
         
         try:
-            result = self.llm_client.call(self.model, self.system_prompt, user_prompt)
+            result = self.llm_client.call(self.model, self.system_prompt, user_prompt, q_id=q_id)
             if result.error:
                 return 0, f"Error scoring: {result.error}"
                 

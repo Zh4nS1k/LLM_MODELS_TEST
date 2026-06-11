@@ -10,3 +10,4 @@ loguru>=0.7.2
 tenacity>=8.2.3
 rich>=13.0.0
 tiktoken>=0.7.0
+google-genai>=1.0.0

@@ -1,4 +1,5 @@
 """Pipeline orchestration for the Legal RAG Tester."""
+import os
 import time
 from tqdm import tqdm
 from logger import pipeline_logger
@@ -85,12 +86,35 @@ class TestPipeline:
             )
             
             total_llm_ms = 0.0
+            model_results = []
             
-            for model_name in self.models_to_test:
-                time.sleep(settings.groq_rpm_delay)
+            prev_model = None
+
+            for i, model_name in enumerate(self.models_to_test):
+                # Inter-request delay based on provider
+                if prev_model:
+                    prev_is_google = prev_model.startswith("models/")
+                    next_is_google = model_name.startswith("models/")
+
+                    if prev_is_google or next_is_google:
+                        # Any transition involving Google: use Google delay
+                        time.sleep(float(os.getenv("GOOGLE_RPM_DELAY", "4.0")))
+                    else:
+                        # Both Groq: use Groq delay
+                        time.sleep(float(os.getenv("GROQ_RPM_DELAY", "2.5")))
+                prev_model = model_name
+
+
                 
                 with StepTimer("llm_call") as t_llm:
-                    result = self.llm_client.call(model_name, prompt["system"], prompt["user"])
+                    try:
+                        result = self.llm_client.call(model_name, prompt["system"], prompt["user"], q_id=question.id)
+                    except KeyboardInterrupt:
+                        pipeline_logger.log_warning("⌨️  Interrupted by user — exiting...")
+                        raise
+                    except Exception as e:
+                        pipeline_logger.log_error(question.id, model_name, f"unhandled: {e}")
+                        result = LLMResult(model=model_name, answer="", error=str(e), latency_ms=0, chunks_used=0)
                 
                 total_llm_ms += t_llm.elapsed_ms
                 
@@ -130,7 +154,7 @@ class TestPipeline:
                 result.completion_tokens = comp_toks
                 
                 # Auto-scoring
-                score_val, reason = self.answer_scorer.score(question.text, prompt["user"], result.answer)
+                score_val, reason = self.answer_scorer.score(question.text, prompt["user"], result.answer, question.id)
                 result.quality_score = score_val
                 result.quality_reason = reason
                 
@@ -139,6 +163,9 @@ class TestPipeline:
                 self.token_counter.record(model_name, prompt_toks, comp_toks)
                 
                 results.append(TestRow(question=question, result=result))
+                model_results.append(result)
+
+                pipeline_logger.log_model_result(i + 1, len(self.models_to_test), model_name, result)
                 
                 if result.error:
                     pipeline_logger.log_error(question.id, model_name, result.error)
@@ -154,7 +181,10 @@ class TestPipeline:
                 for rank, row in enumerate(q_results, 1):
                     row.result.quality_rank = rank
                     
-                pipeline_logger.log_question_done(question.id, t_embed.elapsed_ms + t_retrieve.elapsed_ms + total_llm_ms, len(self.models_to_test))
+                pipeline_logger.log_question_best(
+                    question.id, model_results,
+                    t_embed.elapsed_ms + t_retrieve.elapsed_ms + total_llm_ms
+                )
                     
         if not dry_run:
             excel_io.write_results(results)

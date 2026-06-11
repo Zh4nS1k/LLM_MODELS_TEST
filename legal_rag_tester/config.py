@@ -31,6 +31,9 @@ class Settings:
         self.groq_base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
         self.groq_rpm_delay = float(os.getenv("GROQ_RPM_DELAY", "2.1"))
 
+        # === Google API ===
+        self.google_api_key = os.getenv("GOOGLE_API_KEY", "")
+
         # === IO ===
         self.input_excel = os.getenv("INPUT_EXCEL", "questions.xlsx")
         self.input_sheet = os.getenv("INPUT_SHEET", "Sheet1")

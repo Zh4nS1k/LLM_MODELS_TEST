@@ -73,6 +73,59 @@ class PipelineLogger:
     def log_question_done(self, q_id: str, elapsed_ms: float, models_count: int):
         self.console.print(f"✅  Q#{q_id} completed ({models_count} models) in {elapsed_ms:.0f}ms total")
 
+    def log_model_result(self, model_idx: int, total_models: int,
+                         model: str, result) -> None:
+        """Print one model result line immediately after it completes."""
+        model_short = model.split("/")[-1][:32]
+
+        if result.error and result.error not in ("truncated",):
+            icon = "❌"
+            style = "red"
+        elif result.answer.strip() == "Контекстте жауап жоқ.":
+            icon = "🔶"
+            style = "yellow"
+        else:
+            icon = "✅"
+            style = "default"
+
+        answer_preview = result.answer.replace("\n", " ")[:80] if result.answer else ""
+        branch = "└─" if model_idx == total_models else "├─"
+        score_val = result.quality_score if result.quality_score is not None else "?"
+        score_str = f"score={score_val}"
+        tok_s = result.tokens_per_sec if result.tokens_per_sec else 0.0
+
+        line = (
+            f"  {branch} [{model_idx}/{total_models}] "
+            f"{model_short:<32} "
+            f"{icon}  "
+            f"{result.latency_ms:>7.0f}ms | "
+            f"{tok_s:>6.1f} tok/s | "
+            f"{score_str:<8} | "
+            f"{answer_preview}..."
+        )
+        self.console.print(line, style=style)
+
+    def log_question_best(self, q_id: str, model_results: list,
+                          total_ms: float) -> None:
+        """Print best model summary after all models for one question."""
+        answered = [
+            r for r in model_results
+            if not r.error
+            and r.answer.strip() != "Контекстте жауап жоқ."
+            and r.quality_score
+        ]
+        if answered:
+            best = max(answered, key=lambda r: r.quality_score)
+            best_str = f"best: {best.model.split('/')[-1]} (score={best.quality_score})"
+        else:
+            best_str = "no answered results"
+
+        self.console.print(
+            f"  ✅ Q#{q_id} done — {len(model_results)} models | "
+            f"{best_str} | {total_ms:.0f}ms total\n"
+        )
+
+
     def log_pipeline_summary(self, results: List[TestRow]):
         table = Table(title="🏁 Pipeline Summary", show_header=True, header_style="bold magenta", show_lines=True, min_width=110)
         table.add_column("Model", style="cyan", min_width=46, no_wrap=True)
