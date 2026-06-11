@@ -14,7 +14,7 @@ class Settings:
         self.pinecone_index_name = os.getenv("PINECONE_INDEX_NAME", "")
         self.pinecone_namespace = os.getenv("PINECONE_NAMESPACE", "")
         self.pinecone_top_k = int(os.getenv("PINECONE_TOP_K", "5"))
-        self.pinecone_score_threshold = float(os.getenv("PINECONE_SCORE_THRESHOLD", "0.70"))
+        self.pinecone_score_threshold = float(os.getenv("PINECONE_SCORE_THRESHOLD", "0.0"))
 
         # === Embedding model ===
         self.embedding_model = os.getenv("EMBEDDING_MODEL", "intfloat/multilingual-e5-large")

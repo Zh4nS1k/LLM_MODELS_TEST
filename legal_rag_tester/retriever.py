@@ -14,8 +14,23 @@ class PineconeRetriever:
         self.pc = Pinecone(api_key=settings.pinecone_api_key)
         self.index = self.pc.Index(settings.pinecone_index_name)
         
+        stats = self.index.describe_index_stats()
+        self.index_dim = stats.dimension
+        namespaces = list(stats.namespaces.keys())
+        if self.settings.pinecone_namespace and self.settings.pinecone_namespace not in namespaces:
+            pipeline_logger.log_warning(
+                f"⚠️  Namespace '{self.settings.pinecone_namespace}' not found in index. "
+                f"Available namespaces: {namespaces}. "
+                f"Falling back to default namespace."
+            )
+        
     def query(self, embedding: List[float], top_k: int = None) -> List[Chunk]:
         """Queries the Pinecone index with the given embedding."""
+        query_dim = len(embedding)
+        assert self.index_dim == query_dim, (
+            f"DIMENSION MISMATCH: index={self.index_dim}, embedder={query_dim}. "
+            f"Wrong embedding model configured."
+        )
         k = top_k or self.settings.pinecone_top_k
         
         response = self.index.query(
@@ -26,8 +41,13 @@ class PineconeRetriever:
             include_metadata=True
         )
         
+        matches = response.get("matches", [])
+        if matches:
+            sample_keys = list(matches[0].metadata.keys())
+            pipeline_logger.log_simple_info(f"📄 Pinecone metadata keys: {sample_keys}")
+
         chunks = []
-        for match in response.get("matches", []):
+        for match in matches:
             score = match.get("score", 0.0)
             
             if score < self.settings.pinecone_score_threshold:
@@ -47,8 +67,5 @@ class PineconeRetriever:
             ))
             
         chunks.sort(key=lambda x: x.score, reverse=True)
-        
-        if len(chunks) < 2:
-            pipeline_logger.log_warning(f"Retrieved fewer than 2 chunks (found {len(chunks)})")
             
         return chunks

@@ -18,9 +18,17 @@ class LLMClient:
             timeout=settings.request_timeout
         )
 
+    def _strip_think_tags(self, text: str) -> str:
+        """Remove <think>...</think> blocks from any model response."""
+        import re
+        cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+        return cleaned.strip()
+
     def _call_groq(self, model: str, system: str, user: str) -> Dict[str, Any]:
         """Calls the Groq API with custom rate limit handling."""
         delays = [2, 4, 8]
+        import os
+        from config import settings
         
         for attempt, delay in enumerate(delays + [0]):
             try:
@@ -31,7 +39,8 @@ class LLMClient:
                         {"role": "system", "content": system},
                         {"role": "user", "content": user}
                     ],
-                    temperature=0.0
+                    temperature=0.0,
+                    timeout=float(os.getenv("QWEN_TIMEOUT", "45")) if "qwen" in model.lower() else settings.request_timeout,
                 )
                 latency_ms = (time.time() - start_time) * 1000
                 
@@ -61,12 +70,10 @@ class LLMClient:
         result = self._call_groq(model, system, user)
         
         answer_raw = result["answer"]
-        answer = answer_raw
+        answer = self._strip_think_tags(answer_raw)
         
-        # DeepSeek-R1 special handling
-        if model == "deepseek-r1-distill-70b":
-            # Strip everything inside <think>...</think>
-            answer = re.sub(r'<think>.*?</think>', '', answer_raw, flags=re.DOTALL).strip()
+        if '<think>' in answer:
+            answer = answer[:answer.index('<think>')].strip()
             
         return LLMResult(
             model=model,

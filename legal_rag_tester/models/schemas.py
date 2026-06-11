@@ -29,6 +29,7 @@ class LLMResult(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     chunks_used: int = 0
+    avg_score: float = 0.0
     retrieved_scores: list[float] = Field(default_factory=list)
 
 class TestRow(BaseModel):

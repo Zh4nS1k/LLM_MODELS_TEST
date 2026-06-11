@@ -57,10 +57,24 @@ class TestPipeline:
                 chunks = self.retriever.query(embedding)
             pipeline_logger.log_retrieval(question.id, chunks, t_retrieve.elapsed_ms)
             
+            if len(chunks) < 2:
+                pipeline_logger.log_warning(
+                    f"Q#{question.id} — Retrieved {len(chunks)} chunks. "
+                    f"Question: '{question.text[:80]}...' "
+                    f"Embed dim: {len(embedding)} | Retrieve time: {t_retrieve.elapsed_ms:.0f}ms"
+                )
+            
             if dry_run:
                 continue
             
             prompt = self.prompt_builder.build(question.text, chunks)
+            
+            prompt_token_count = self.token_counter.count_prompt(prompt["system"], prompt["user"])
+            pipeline_logger.log_simple_info(
+                f"🧮 Q#{question.id} prompt built: {prompt_token_count} tokens "
+                f"({len(chunks)} chunks, system={self.token_counter.count(prompt['system'])} "
+                f"user={self.token_counter.count(prompt['user'])})"
+            )
             
             total_llm_ms = 0.0
             
@@ -74,14 +88,34 @@ class TestPipeline:
                 
                 result.chunks_used = len(chunks)
                 result.retrieved_scores = [c.score for c in chunks]
+                result.avg_score = sum(c.score for c in chunks) / len(chunks) if chunks else 0.0
                 result.embed_ms = t_embed.elapsed_ms
                 result.retrieve_ms = t_retrieve.elapsed_ms
                 result.llm_ms = t_llm.elapsed_ms
                 result.total_ms = t_embed.elapsed_ms + t_retrieve.elapsed_ms + t_llm.elapsed_ms
                 
-                # Approximate tokens for groq if missing, otherwise use what's returned
-                prompt_toks = result.prompt_tokens or self.token_counter.count_prompt(prompt["system"], prompt["user"])
+                # Sanitize the final answer
+                def sanitize_answer(ans: str) -> str:
+                    NO_ANSWER = "Контекстте жауап жоқ."
+                    if ans.strip().startswith(NO_ANSWER):
+                        return NO_ANSWER
+                    ans = ans.replace(NO_ANSWER, "").strip()
+                    return ans if ans else NO_ANSWER
+                    
+                if result.answer:
+                    result.answer = sanitize_answer(result.answer)
+                    
+                # Calculate tokens consistently
+                prompt_toks = prompt_token_count
                 comp_toks = result.completion_tokens or self.token_counter.count(result.answer_raw)
+                
+                if t_llm.elapsed_ms > 10000:
+                    tok_s = comp_toks / (result.llm_ms / 1000.0) if result.llm_ms > 0 else 0.0
+                    pipeline_logger.log_warning(
+                        f"⚠️  [{model_name}] Q#{question.id} slow response: {t_llm.elapsed_ms:.0f}ms "
+                        f"({comp_toks} tokens, {tok_s:.1f} tok/s)"
+                    )
+                
                 total_toks = prompt_toks + comp_toks
                 
                 result.prompt_tokens = prompt_toks

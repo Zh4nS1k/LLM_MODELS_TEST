@@ -16,12 +16,14 @@ class PromptBuilder:
             "You are a precise legal assistant. Your task is to answer legal questions strictly based on the provided document excerpts.\n\n"
             "Rules you must follow without exception:\n"
             "1. Answer ONLY using information explicitly stated in the provided context chunks.\n"
-            "2. If the answer is not found in the context, respond exactly: \"Контекстте жауап жоқ.\" (or the language-appropriate equivalent: \"No answer found in context.\")\n"
+            "2. If the answer cannot be fully determined from the provided context, output ONLY this single line and nothing else, no explanation, no continuation, no 'However':\n"
+            "Контекстте жауап жоқ.\n"
             "3. Do NOT use your general knowledge, training data, or external information.\n"
             "4. Do NOT speculate, infer beyond what is written, or extrapolate.\n"
             "5. Cite the source chunk number(s) in your answer (e.g., \"[Chunk 2]\").\n"
             "6. Keep your answer concise and direct. Do not repeat the question.\n"
-            "7. If multiple chunks are relevant, synthesize from all of them."
+            "7. If multiple chunks are relevant, synthesize from all of them.\n"
+            "8. NEVER mix the no-answer phrase with actual answer content. Either you answer using the context, or you output only 'Контекстте жауап жоқ.' — these are mutually exclusive."
         )
 
     def _truncate_text(self, text: str, max_chars: int) -> str:
@@ -56,7 +58,10 @@ class PromptBuilder:
             if chars_used >= max_chars:
                 break
                 
-        chunks_str = "\n\n".join(formatted_chunks)
+        if not formatted_chunks:
+            chunks_str = "Контекст табылмады."
+        else:
+            chunks_str = "\n\n".join(formatted_chunks)
         
         user_prompt = (
             f"Context documents:\n{chunks_str}\n\n"

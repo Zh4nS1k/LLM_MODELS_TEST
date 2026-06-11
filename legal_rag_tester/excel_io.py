@@ -73,7 +73,6 @@ def write_results(results: List[TestRow], base_file_path: str = settings.output_
     for row_data in results:
         q = row_data.question
         r = row_data.result
-        avg_score = sum(r.retrieved_scores) / len(r.retrieved_scores) if r.retrieved_scores else 0.0
         
         row = [
             q.id,
@@ -82,7 +81,7 @@ def write_results(results: List[TestRow], base_file_path: str = settings.output_
             r.answer,
             r.answer_raw,
             r.chunks_used,
-            round(avg_score, 4),
+            round(r.avg_score, 4),
             round(r.embed_ms, 2),
             round(r.retrieve_ms, 2),
             round(r.llm_ms, 2),

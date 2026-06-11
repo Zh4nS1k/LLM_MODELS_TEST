@@ -74,15 +74,15 @@ class PipelineLogger:
         self.console.print(f"✅  Q#{q_id} completed ({models_count} models) in {elapsed_ms:.0f}ms total")
 
     def log_pipeline_summary(self, results: List[TestRow]):
-        table = Table(title="🏁 Pipeline Summary", show_header=True, header_style="bold magenta", show_lines=True)
-        table.add_column("Model")
-        table.add_column("Questions")
-        table.add_column("Answered")
-        table.add_column("No-answer")
-        table.add_column("Errors")
-        table.add_column("Avg latency (ms)")
-        table.add_column("Avg tok/s")
-        table.add_column("Total tokens")
+        table = Table(title="🏁 Pipeline Summary", show_header=True, header_style="bold magenta", show_lines=True, min_width=110)
+        table.add_column("Model", style="cyan", min_width=46, no_wrap=True)
+        table.add_column("Questions", style="white", min_width=10, justify="right")
+        table.add_column("Answered", style="green", min_width=10, justify="right")
+        table.add_column("No-answer", style="yellow", min_width=10, justify="right")
+        table.add_column("Errors", style="red", min_width=8, justify="right")
+        table.add_column("Avg latency ms", style="blue", min_width=15, justify="right")
+        table.add_column("Avg tok/s", style="magenta", min_width=11, justify="right")
+        table.add_column("Total tokens", style="white", min_width=13, justify="right")
 
         summary = {}
         for row in results:
@@ -96,7 +96,7 @@ class PipelineLogger:
                 s["err"] += 1
             else:
                 ans = row.result.answer
-                if "No answer found in context" in ans or "Контекстте жауап жоқ" in ans:
+                if ans and ans.strip() == "Контекстте жауап жоқ.":
                     s["no_ans"] += 1
                 else:
                     s["ans"] += 1
