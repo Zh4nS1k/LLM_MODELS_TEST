@@ -1,0 +1,140 @@
+"""Logging module replacing loguru using rich."""
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+import time
+from typing import List
+from models.schemas import TestRow, Chunk
+from config import settings
+
+class PipelineLogger:
+    """Rich-based logging replacing loguru."""
+    def __init__(self, verbose: bool = False):
+        self.console = Console()
+        self.verbose = verbose
+
+    def log_pipeline_start(self, total_questions: int, models: List[str]):
+        text = f"Questions: {total_questions}\nModels: {', '.join(models)}\nTime: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        text += f"Pinecone Index: {settings.pinecone_index_name}\nEmbedding Model: {settings.embedding_model}"
+        panel = Panel(text, title="🚀 Legal RAG Testing Pipeline", border_style="bold blue")
+        self.console.print(panel)
+
+    def log_question(self, q_id: str, text: str, index: int, total: int):
+        self.console.print(f"🚀 [bold cyan][Q {index}/{total}][/bold cyan] #{q_id} — {text[:100]}...")
+
+    def log_retrieval(self, q_id: str, chunks: List[Chunk], elapsed_ms: float):
+        if not self.verbose: return
+        self.console.print(f"🔍 Retrieved {len(chunks)} chunks in {elapsed_ms:.0f}ms")
+        for i, chunk in enumerate(chunks, 1):
+            text_preview = chunk.text[:120].replace('\n', ' ')
+            self.console.print(f"📄   [Chunk {i}] score={chunk.score:.3f} | {text_preview}...")
+
+    def log_request(self, q_id: str, model: str, system: str, user: str, token_count: int):
+        if not self.verbose: return
+        self.console.print(f"📤 [{model}] Sending request — {token_count} prompt tokens")
+        sys_preview = system[:200] + "..." if len(system) > 200 else system
+        usr_preview = user[:400] + "..." if len(user) > 400 else user
+        content = f"**System Prompt:**\n{sys_preview}\n\n**User Prompt:**\n{usr_preview}"
+        panel = Panel(content, title=f"REQUEST → {model}", border_style="blue")
+        self.console.print(panel)
+
+    def log_response(self, q_id: str, model: str, answer: str, elapsed_ms: float):
+        if not self.verbose: return
+        self.console.print(f"📥 [{model}] Response received in {elapsed_ms:.0f}ms")
+        color = "yellow" if "No answer found in context" in answer or "Контекстте жауап жоқ" in answer else "green"
+        panel = Panel(answer, title=f"RESPONSE ← {model}", border_style=color)
+        self.console.print(panel)
+
+    def log_tokens(self, q_id: str, model: str, prompt_tokens: int, completion_tokens: int, total_tokens: int, elapsed_ms: float):
+        if not self.verbose: return
+        tokens_per_sec = completion_tokens / (elapsed_ms / 1000) if elapsed_ms > 0 else 0
+        self.console.print(f"🧮   prompt={prompt_tokens} | completion={completion_tokens} | total={total_tokens} | speed={tokens_per_sec:.1f} tok/s")
+
+    def log_timing(self, step_name: str, elapsed_ms: float):
+        if not self.verbose: return
+        self.console.print(f"⏱️  Timing for {step_name}: {elapsed_ms:.0f}ms")
+
+    def log_warning(self, message: str):
+        self.console.print(f"⚠️  [yellow]{message}[/yellow]")
+
+    def log_error(self, q_id: str, model: str, error: str):
+        self.console.print(f"❌  [red][{model}] Q#{q_id} FAILED — {error}[/red]")
+        
+    def log_simple_error(self, message: str):
+        self.console.print(f"❌  [red]{message}[/red]")
+        
+    def log_simple_info(self, message: str):
+        if not self.verbose: return
+        self.console.print(f"ℹ️  {message}")
+        
+    def log_simple_success(self, message: str):
+        self.console.print(f"✅  [green]{message}[/green]")
+
+    def log_question_done(self, q_id: str, elapsed_ms: float, models_count: int):
+        self.console.print(f"✅  Q#{q_id} completed ({models_count} models) in {elapsed_ms:.0f}ms total")
+
+    def log_pipeline_summary(self, results: List[TestRow]):
+        table = Table(title="🏁 Pipeline Summary", show_header=True, header_style="bold magenta", show_lines=True)
+        table.add_column("Model")
+        table.add_column("Questions")
+        table.add_column("Answered")
+        table.add_column("No-answer")
+        table.add_column("Errors")
+        table.add_column("Avg latency (ms)")
+        table.add_column("Avg tok/s")
+        table.add_column("Total tokens")
+
+        summary = {}
+        for row in results:
+            m = row.result.model
+            if m not in summary:
+                summary[m] = {"q": 0, "ans": 0, "no_ans": 0, "err": 0, "lat": 0.0, "tok_s": [], "tot_tok": 0}
+            
+            s = summary[m]
+            s["q"] += 1
+            if row.result.error:
+                s["err"] += 1
+            else:
+                ans = row.result.answer
+                if "No answer found in context" in ans or "Контекстте жауап жоқ" in ans:
+                    s["no_ans"] += 1
+                else:
+                    s["ans"] += 1
+            
+            s["lat"] += row.result.llm_ms
+            if row.result.tokens_per_sec is not None:
+                s["tok_s"].append(row.result.tokens_per_sec)
+            s["tot_tok"] += row.result.prompt_tokens + row.result.completion_tokens
+            
+        for m, s in summary.items():
+            avg_lat = s["lat"] / s["q"] if s["q"] > 0 else 0
+            avg_tok_s = sum(s["tok_s"]) / len(s["tok_s"]) if s["tok_s"] else 0
+            table.add_row(
+                m, str(s["q"]), str(s["ans"]), str(s["no_ans"]), str(s["err"]),
+                f"{avg_lat:.0f}", f"{avg_tok_s:.1f}", str(s["tot_tok"])
+            )
+            
+        # Add total row
+        if summary:
+            tot_q = sum(s["q"] for s in summary.values())
+            tot_ans = sum(s["ans"] for s in summary.values())
+            tot_no_ans = sum(s["no_ans"] for s in summary.values())
+            tot_err = sum(s["err"] for s in summary.values())
+            tot_lat = sum(s["lat"] for s in summary.values())
+            tot_tok_s = [tok_s for s in summary.values() for tok_s in s["tok_s"]]
+            avg_tot_tok_s = sum(tot_tok_s) / len(tot_tok_s) if tot_tok_s else 0
+            avg_tot_lat = tot_lat / tot_q if tot_q > 0 else 0
+            tot_tokens = sum(s["tot_tok"] for s in summary.values())
+            
+            table.add_row(
+                "TOTAL", str(tot_q), str(tot_ans), str(tot_no_ans), str(tot_err),
+                f"{avg_tot_lat:.0f}", f"{avg_tot_tok_s:.1f}", str(tot_tokens),
+                style="bold cyan"
+            )
+            
+        self.console.print(table)
+
+pipeline_logger = PipelineLogger(verbose=settings.verbose)
+
+def update_logger_verbose(verbose: bool):
+    pipeline_logger.verbose = verbose
