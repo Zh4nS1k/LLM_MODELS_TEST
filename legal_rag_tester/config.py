@@ -34,6 +34,9 @@ class Settings:
         # === Google API ===
         self.google_api_key = os.getenv("GOOGLE_API_KEY", "")
 
+        # === OpenAI API ===
+        self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
+
         # === IO ===
         self.input_excel = os.getenv("INPUT_EXCEL", "questions.xlsx")
         self.input_sheet = os.getenv("INPUT_SHEET", "Sheet1")

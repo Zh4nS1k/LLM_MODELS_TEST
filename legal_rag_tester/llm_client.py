@@ -15,11 +15,28 @@ class LLMClient:
 
     def __init__(self):
         """Initializes the LLMClient."""
+        # Groq client (Llama, Qwen, openai/gpt-oss-* routed via Groq)
         self.client = OpenAI(
             api_key=settings.groq_api_key, 
             base_url=settings.groq_base_url, 
             timeout=settings.request_timeout
         )
+        # Real OpenAI client (gpt-4o, gpt-5.4-mini, etc.)
+        self.openai_client = OpenAI(
+            api_key=settings.openai_api_key,
+            base_url="https://api.openai.com/v1",
+            timeout=settings.request_timeout
+        )
+
+    @staticmethod
+    def _is_google(model: str) -> bool:
+        return model.startswith("models/")
+
+    @staticmethod
+    def _is_openai(model: str) -> bool:
+        """True for real OpenAI models (not the openai/gpt-oss-* Groq aliases)."""
+        # openai/gpt-oss-* and similar are Groq-hosted; plain gpt-* go to OpenAI
+        return model.startswith("gpt-") and not model.startswith("openai/")
 
     def _strip_think_tags(self, text: str) -> str:
         """Remove <think>...</think> blocks from any model response."""
@@ -133,20 +150,67 @@ class LLMClient:
             completion_tokens=completion_tokens,
         )
 
+    def _call_openai(self, model: str, system: str, user: str, q_id: str) -> dict:
+        """Call the real OpenAI API (api.openai.com)."""
+        delays = [5, 10, 20]
+        for attempt, delay in enumerate(delays + [0]):
+            try:
+                start_time = time.time()
+                response = self.openai_client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user}
+                    ],
+                    temperature=0.0,
+                    timeout=settings.request_timeout,
+                )
+                latency_ms = (time.time() - start_time) * 1000
+                prompt_tokens = response.usage.prompt_tokens if response.usage else 0
+                completion_tokens = response.usage.completion_tokens if response.usage else 0
+                return {
+                    "answer": response.choices[0].message.content or "",
+                    "latency_ms": latency_ms,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "error": ""
+                }
+            except RateLimitError as e:
+                if attempt < len(delays):
+                    pipeline_logger.log_warning(f"[{model}] OpenAI rate limited. Retrying in {delay}s...")
+                    time.sleep(delay)
+                else:
+                    pipeline_logger.log_error(q_id, model, "OpenAI rate limited after retries.")
+                    raise
+            except Exception as e:
+                pipeline_logger.log_error(q_id, model, f"OpenAI API Error: {str(e)}")
+                raise
+
     def call(self, model: str, system: str, user: str, q_id: str = "unknown") -> LLMResult:
         """Routes the call to the appropriate API."""
         start = time.perf_counter()
         try:
-            if model.startswith("models/"):
+            if self._is_google(model):
                 result = self._call_google(model, system, user)
+            elif self._is_openai(model):
+                raw_res = self._call_openai(model, system, user, q_id)
+                answer_raw = raw_res["answer"]
+                answer = self._strip_think_tags(answer_raw)
+                result = LLMResult(
+                    model=model,
+                    answer=answer,
+                    answer_raw=answer_raw,
+                    error=raw_res["error"],
+                    latency_ms=raw_res["latency_ms"],
+                    prompt_tokens=raw_res["prompt_tokens"],
+                    completion_tokens=raw_res["completion_tokens"]
+                )
             else:
                 raw_res = self._call_llm(model, system, user, q_id)
                 answer_raw = raw_res["answer"]
                 answer = self._strip_think_tags(answer_raw)
-                
                 if '<think>' in answer:
                     answer = answer[:answer.index('<think>')].strip()
-                    
                 result = LLMResult(
                     model=model,
                     answer=answer,
