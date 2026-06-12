@@ -1,49 +1,10 @@
-# Environments
-.env
-.venv
 venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
+*.pyc
+*.pyo
 *.egg-info/
-.installed.cfg
-*.egg
+.env
+*.tmp.xlsx
 
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IDEs / Editor
-.vscode/
-.idea/
-.claude/
-*.swp
-*.swo
-*~
-.DS_Store
-
-# Data files / Results
-results*.xlsx
-*results.xlsx
-# Ignore any output excel files while keeping the template/input if needed
-# (You can comment this out if you want to track questions.xlsx)
-# *.xlsx
+# Results — all test output goes here
+results/

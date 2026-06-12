@@ -165,7 +165,11 @@ class PipelineLogger:
         for m, s in summary.items():
             avg_lat = s["lat"] / s["q"] if s["q"] > 0 else 0
             avg_tok_s = sum(s["tok_s"]) / len(s["tok_s"]) if s["tok_s"] else 0
-            avg_qual = sum(s["qual"]) / len(s["qual"]) if s["qual"] else 0.0
+            
+            if s["qual"]:
+                avg_qual_str = f"{sum(s['qual']) / len(s['qual']):.1f}"
+            else:
+                avg_qual_str = "—"
             
             table.add_row(
                 m,
@@ -176,7 +180,7 @@ class PipelineLogger:
                 f"{avg_lat:.0f}",
                 f"{avg_tok_s:.1f}",
                 str(s["tot_tok"]),
-                f"{avg_qual:.1f}"
+                avg_qual_str
             )
             
         # Add total row
@@ -190,10 +194,12 @@ class PipelineLogger:
             avg_tot_tok_s = sum(tot_tok_s) / len(tot_tok_s) if tot_tok_s else 0
             avg_tot_lat = tot_lat / tot_q if tot_q > 0 else 0
             tot_tokens = sum(s["tot_tok"] for s in summary.values())
+            tot_qual = [q for s in summary.values() for q in s["qual"]]
+            avg_tot_qual = f"{sum(tot_qual) / len(tot_qual):.1f}" if tot_qual else "—"
             
             table.add_row(
                 "TOTAL", str(tot_q), str(tot_ans), str(tot_no_ans), str(tot_err),
-                f"{avg_tot_lat:.0f}", f"{avg_tot_tok_s:.1f}", str(tot_tokens),
+                f"{avg_tot_lat:.0f}", f"{avg_tot_tok_s:.1f}", str(tot_tokens), avg_tot_qual,
                 style="bold cyan"
             )
             

@@ -1,6 +1,7 @@
 """Excel I/O module for reading questions and writing results."""
 import os
-from typing import List
+from pathlib import Path
+from typing import List, Optional
 from datetime import datetime
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
@@ -52,8 +53,12 @@ def read_questions(file_path: str = settings.input_excel, sheet_name: str = sett
         
     return questions
 
-def write_results(results: List[TestRow], base_file_path: str = settings.output_excel) -> None:
-    """Writes the test results to an output Excel file with styling."""
+def write_results(results: List[TestRow], output_path: Optional[Path] = None) -> None:
+    """Writes the test results to an output Excel file with styling.
+    
+    If output_path is provided (used by CheckpointManager), writes to that exact path.
+    Otherwise creates a timestamped file in settings.output_dir.
+    """
     if not results:
         pipeline_logger.log_warning("No results to write")
         return
@@ -147,10 +152,14 @@ def write_results(results: List[TestRow], base_file_path: str = settings.output_
             for cell in row:
                 cell.fill = even_row_fill
                 
-    # Save with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    name, ext = os.path.splitext(base_file_path)
-    final_path = f"{name}_{timestamp}{ext}"
-    
-    wb.save(final_path)
-    pipeline_logger.log_simple_info(f"Results saved to {final_path}")
+    # Save to exact path (checkpoint) or timestamped path in output_dir
+    if output_path is not None:
+        save_path = Path(output_path)
+    else:
+        out_dir = Path(settings.output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        save_path = out_dir / f"results_{timestamp}.xlsx"
+
+    wb.save(str(save_path))
+    pipeline_logger.log_simple_info(f"Results saved to {save_path}")

@@ -1,6 +1,6 @@
 """Pydantic schemas for the Legal RAG Tester project."""
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Any
+from typing import Any, Optional
 
 class Question(BaseModel):
     """Represents a legal question read from the input Excel."""
@@ -30,7 +30,7 @@ class LLMResult(BaseModel):
     completion_tokens: int = 0
     chunks_used: int = 0
     avg_score: float = 0.0
-    quality_score: int = 0
+    quality_score: Optional[int] = None   # None=scorer failed, 0=truly bad answer
     quality_reason: str = ""
     quality_rank: int = 0
     retrieved_scores: list[float] = Field(default_factory=list)

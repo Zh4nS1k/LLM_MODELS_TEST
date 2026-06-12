@@ -42,7 +42,7 @@ class Settings:
         self.input_sheet = os.getenv("INPUT_SHEET", "Sheet1")
         self.question_column = os.getenv("QUESTION_COLUMN", "question")
         self.id_column = os.getenv("ID_COLUMN", "id")
-        self.output_excel = os.getenv("OUTPUT_EXCEL", "results.xlsx")
+        self.output_dir = os.getenv("OUTPUT_DIR", "results")
 
         # === Pipeline behavior ===
         self.max_context_tokens = int(os.getenv("MAX_CONTEXT_TOKENS", "3000"))
